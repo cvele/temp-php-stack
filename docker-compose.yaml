@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+    ejabberd: 
+        depends_on: 
+            - db
+        build:
+            context: .
+            dockerfile: .docker/ejabberd/Dockerfile
+            args:
+                APP_ENV: ${APP_ENV}
+                APP_DEBUG: ${APP_DEBUG}
+                TZ: ${TIMEZONE:-Europe/Belgrade}
+        ports:
+          - 5222:5222 #The default port for XMPP clients.
+          - 5280:5280 #For admin interface.
+          - 5443:5443 #With encryption, used for admin interface, API, CAPTCHA, OAuth, Websockets and XMPP BOSH.
+          - 1883:1883 #Used for MQTT
+          - "4369-4399:4369-4399" #EPMD and Erlang connectivity, used for ejabberdctl and clustering
+        volumes:
+            - ejabberd-db:/home/ejabberd/database
+            - .docker/ejabberd/ejabberd.yml:/home/ejabberd/ejabberd.yml
+        environment:
+            TZ: ${TIMEZONE:-Europe/Belgrade}
+        networks:
+            - docker_net
+    localstack:
+        container_name: "${LOCALSTACK_DOCKER_NAME-localstack_main}"
+        image: localstack/localstack:latest
+        environment:
+            SERVICES: s3,cloudfront
+            DEBUG: 1
+            DATA_DIR: /tmp/localstack/data
+            START_WEB: 1
+            S3_BUCKET: ${S3_BUCKET:-default}
+            DEFAULT_REGION: eu-west-2
+            HOST_TMP_FOLDER: ${TMPDIR:-/tmp/}localstack
+            DOCKER_HOST: unix:///var/run/docker.sock
+        volumes:
+            - localstack-vol:/tmp/localstack
+            - .docker/aws:/docker-entrypoint-initaws.d
+        networks:
+            docker_net:
+                ipv4_address: 10.2.0.12
+        ports:
+            - "127.0.0.1:4510-4559:4510-4559"  # external service port range
+            - "127.0.0.1:4566:4566"            # LocalStack Edge Proxy    
+        extra_hosts:
+            - "default.localstack:10.2.0.12"
+    kibana:
+        depends_on: 
+            - elasticsearch
+        image: kibana:7.9.2
+        volumes:
+            - .docker/kibana.yaml:/usr/share/kibana/config/kibana.yml
+        environment:
+            SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+            ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+        ports:
+            - 5601:5601
+        networks:
+            - docker_net
+
+    elasticsearch:
+        image: elasticsearch:7.9.2
+        ports:
+            - 9200:9200
+            - 9300:9300
+        environment:
+            - discovery.type=single-node
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        networks:
+            - docker_net
+    redis:
+        restart: on-failure
+        ports:
+            - ${REDIS_PORT:-6379}:6379
+        image: redis:alpine
+        networks:
+            - docker_net
+
+    db:
+        image: mysql:8
+        command: --default-authentication-plugin=mysql_native_password
+        volumes:
+          - .docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+          - .docker/mysql/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+          - db-volume:/var/lib/mysql-files
+        environment:
+            MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD:-root}
+            MYSQL_DATABASE: ${DATABASE_NAME:-app}
+            MYSQL_PORT: ${DATABASE_PORT:-3306}
+            TZ: ${TIMEZONE:-Europe/Belgrade}
+        ports:
+            - 3306:${DATABASE_PORT:-3306}
+        networks:
+            - docker_net
+
+    mailtrap:
+        image: dbck/mailtrap:latest
+        init: true
+        environment:
+        - TZ=Europe/Berlin
+        - MAILTRAP_USER=admin
+        - MAILTRAP_PASSWORD=admin
+        ports:
+        - "127.0.0.1:9025:25"
+        - "127.0.0.1:9465:465"
+        - "127.0.0.1:9587:587"
+        - "127.0.0.1:9143:143"
+        - "127.0.0.1:9993:993"
+        - "127.0.0.1:9080:80"
+        networks:
+            - docker_net
+        
+    app:
+        depends_on: 
+            - elasticsearch
+            - db
+        ports:
+            - "${NGINX_PORT:-80}:80"
+        environment:
+            DATABASE_NAME: ${DATABASE_NAME:-app}
+            DATABASE_USERNAME: ${DATABASE_USERNAME:-root}
+            DATABASE_PASSWORD: ${DATABASE_PASSWORD:-root}
+            DATABASE_PORT: ${DATABASE_PORT:-3306}
+            DATABASE_HOST: ${DATABASE_HOST:-db}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_HOST: ${REDIS_HOST:-redis}
+            REDIS_PORT: ${REDIS_PORT:-6379}
+            APP_ENV: ${APP_ENV:-dev}
+            APP_DEBUG: ${APP_DEBUG:-1}
+            APP_SECRET: ${APP_SECRET:-7e85f0bbd4ba4402fdd0c66f74624861}
+            MAILER_DSN: ${MAILER_DSN:-smtp://mailtrap:25?verify_peer=0}
+            EWZ_RECAPTCHA_SITE_KEY: ${EWZ_RECAPTCHA_SITE_KEY:-}
+            EWZ_RECAPTCHA_SECRET: ${EWZ_RECAPTCHA_SECRET:-}
+            QUICK_BOOT: ${QUICK_BOOT:-}
+            ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+            S3_BUCKET: ${S3_BUCKET:-default}
+            CDN_URL: ${CDN_URL:-http://localhost:4566/default}
+            AWS_KEY: ${AWS_KEY:-123}
+            AWS_SECRET: ${AWS_SECRET:-123}
+            EJABBERD_HOST: ${EJABBERD_HOST:-ejabberd}
+            EJABBERD_API_ENDPOINT: ${EJABBERD_API_ENDPOINT:-/api/}
+            EJABBERD_DOMAIN: ${EJABBERD_DOMAIN:-localhost}
+            EJABBERD_PORT: ${EJABBERD_PORT:-5280}
+            EJABBERD_ADMIN_USERNAME:  ${EJABBERD_ADMIN_USERNAME:-admin@localhost}
+            EJABBERD_ADMIN_PASSWORD:  ${EJABBERD_ADMIN_PASSWORD:-admin}
+            DEFAULT_LOCALE: ${DEFAULT_LOCALE:-sr_Latn_RS}
+            MQTT_BROKER_HOST: ${MQTT_BROKER_HOST:-ejabberd}
+            MQTT_BROKER_PORT: ${MQTT_BROKER_PORT:-5280}
+            MQTT_PROTOCOL_VERSION: ${MQTT_PROTOCOL_VERSION:-3.1}
+            TZ: ${TIMEZONE:-Europe/Belgrade}
+        build:
+            args:
+                APP_ENV: ${APP_ENV}
+                APP_DEBUG: ${APP_DEBUG}
+                PHP_VERSION: 8.1
+                TZ: ${TIMEZONE:-Europe/Belgrade}
+            context: .
+            dockerfile: Dockerfile
+
+        volumes:
+            - .:/src:delegated
+        networks:
+            - docker_net
+        extra_hosts:
+            - "default.localstack:10.2.0.12"
+
+volumes:
+  db-volume:
+  localstack-vol:
+  ejabberd-db: 
+networks:
+    docker_net:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: 10.2.0.0/16

@@ -1,0 +1,10 @@
+SHELL=bash
+PATH=/root/.composer/vendor/bin:$PATH
+export PATH
+export SHELL
+source /etc/profile.d/bash_completion.sh
+alias app=/src/bin/console
+eval "$(symfony-autocomplete --aliases app)"
+if [ "$APP_ENV" == "dev" ]; then
+    . vendor/bin/activate
+fi

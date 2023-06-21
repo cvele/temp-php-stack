@@ -1,0 +1,334 @@
+###
+###              ejabberd configuration file
+###
+### The parameters used in this configuration file are explained at
+###
+###       https://docs.ejabberd.im/admin/configuration
+###
+### The configuration file is written in YAML.
+### *******************************************************
+### *******           !!! WARNING !!!               *******
+### *******     YAML IS INDENTATION SENSITIVE       *******
+### ******* MAKE SURE YOU INDENT SECTIONS CORRECTLY *******
+### *******************************************************
+### Refer to http://en.wikipedia.org/wiki/YAML for the brief description.
+###
+
+default_db: sql
+hosts:
+  - localhost
+
+loglevel: 4
+
+certfiles:
+  - /home/ejabberd/conf/server.pem
+
+ca_file: "/home/ejabberd/conf/cacert.pem"
+## When using let's encrypt to generate certificates
+##certfiles:
+##  - /etc/letsencrypt/live/localhost/fullchain.pem
+##  - /etc/letsencrypt/live/localhost/privkey.pem
+##
+##ca_file: "/etc/letsencrypt/live/localhost/fullchain.pem"
+
+listen:
+  -
+    port: 5222
+    ip: "::"
+    module: ejabberd_c2s
+    max_stanza_size: 262144
+    shaper: c2s_shaper
+    access: c2s
+    starttls_required: true
+  # -
+  #   port: 5269
+  #   ip: "::"
+  #   module: ejabberd_s2s_in
+  #   max_stanza_size: 524288
+  -
+    port: 5443
+    ip: "::"
+    module: ejabberd_http
+    tls: true
+    request_handlers:
+      # "/admin": ejabberd_web_admin
+      "/api": mod_http_api
+      # "/bosh": mod_bosh
+      # "/captcha": ejabberd_captcha
+      # "/upload": mod_http_upload
+      "/ws": ejabberd_http_ws
+      "/mqtt": mod_mqtt
+      # "/oauth": ejabberd_oauth
+  -
+    port: 5280
+    ip: "::"
+    module: ejabberd_http
+    request_handlers:
+      # /admin: ejabberd_web_admin
+      "/api": mod_http_api
+      # "/bosh": mod_bosh
+      "/ws": ejabberd_http_ws
+      "/mqtt": mod_mqtt
+  -
+    port: 1883
+    ip: "::"
+    module: mod_mqtt
+    backlog: 1000
+  ##
+  ## https://docs.ejabberd.im/admin/configuration/#stun-and-turn
+  ## ejabberd_stun: Handles STUN Binding requests
+  ##
+  ##-
+  ##  port: 3478
+  ##  ip: "0.0.0.0"
+  ##  transport: udp
+  ##  module: ejabberd_stun
+  ##  use_turn: true
+  ##  turn_ip: "{{ IP }}"
+  ##  auth_type: user
+  ##  auth_realm: "example.com"
+  ##-
+  ##  port: 3478
+  ##  ip: "0.0.0.0"
+  ##  module: ejabberd_stun
+  ##  use_turn: true
+  ##  turn_ip: "{{ IP }}"
+  ##  auth_type: user
+  ##  auth_realm: "example.com"
+  ##- 
+  ##  port: 5349
+  ##  ip: "0.0.0.0"
+  ##  module: ejabberd_stun
+  ##  certfile: "/home/ejabberd/conf/server.pem"
+  ##  tls: true
+  ##  use_turn: true
+  ##  turn_ip: "{{ IP }}"
+  ##  auth_type: user
+  ##  auth_realm: "example.com"
+  ##
+  ## https://docs.ejabberd.im/admin/configuration/#sip
+  ## To handle SIP (VOIP) requests:
+  ##
+  ##-
+  ##  port: 5060
+  ##  ip: "0.0.0.0"
+  ##  transport: udp
+  ##  module: ejabberd_sip
+  ##-
+  ##  port: 5060
+  ##  ip: "0.0.0.0"
+  ##  module: ejabberd_sip
+  ##-
+  ##  port: 5061
+  ##  ip: "0.0.0.0"
+  ##  module: ejabberd_sip
+  ##  tls: true
+# s2s_use_starttls: optional
+websocket_origin: 
+    - 'http://localhost'
+    - 'https://localhost'
+acl:
+  loopback:
+    ip:
+      - 10.2.0.0/16
+      - 127.0.0.0/8
+      - ::1/128
+      - ::FFFF:127.0.0.1/128
+  subscriber:
+    server: 
+      - "localhost"
+  admin:
+    user:
+      - "admin@localhost"
+
+access_rules:
+  local:
+    allow: loopback
+  c2s:
+    deny: blocked
+    allow: all
+  announce:
+    allow: admin
+  configure:
+    allow: admin
+  muc_create:
+    allow: admin
+  pubsub_createnode:
+    allow: loopback
+  trusted_network:
+    allow: loopback
+
+api_permissions:
+  "console commands":
+    from:
+      - ejabberd_ctl
+    who: all
+    what: "*"
+  "admin access":
+    who:
+      ip: 10.2.0.0/16
+      access:
+        allow:
+          - acl: loopback
+          - acl: admin
+    what:
+      - "*"
+      - "!stop"
+      - "!start"
+  "public commands":
+    who:
+      ip: 10.2.0.0/16
+    what:
+      - status
+      - connected_users_number
+
+shaper:
+  normal: 1000
+  fast: 50000
+
+shaper_rules:
+  max_user_sessions: 
+    - 100: admin
+    - 1
+  max_user_offline_messages:
+    5000: admin
+    100: all
+  c2s_shaper:
+    none: admin
+    normal: all
+  # s2s_shaper: fast
+
+max_fsm_queue: 10000
+
+acme:
+   contact: "mailto:example-admin@example.com"
+   ca_url: "https://acme-staging-v02.api.letsencrypt.org/directory"
+
+modules:
+  mod_adhoc: {}
+  mod_admin_extra: {}
+  mod_announce:
+    access: announce
+  mod_avatar: {}
+  mod_blocking: {}
+  # mod_bosh: {}
+  mod_caps: {}
+  mod_carboncopy: {}
+  mod_client_state: {}
+  mod_configure: {}
+  mod_disco: {}
+  mod_fail2ban: {}
+  mod_http_api: {}
+  # mod_http_upload:
+  #   put_url: https://@HOST@:5443/upload
+  mod_last:
+    db_type: sql
+  mod_block_strangers:
+    allow_local_users: true
+  mod_mam:
+    db_type: sql
+    assume_mam_usage: true
+    default: always
+    cache_missed: false
+  mod_privilege:
+    presence:
+      roster: all
+      managed_entity: all
+  mod_mqtt:
+    db_type: sql
+    access_publish:
+      "#":
+        - allow: admin
+    access_subscribe:
+      "#":
+        - allow: subscriber
+  # mod_push:
+  #   include_sender: true
+  #   include_body: true
+  ##mod_push_keepalive: {}
+  mod_muc:
+    access:
+      - deny
+    access_admin:
+      - allow: admin
+    access_create: muc_create
+    access_persistent: muc_create
+    access_mam:
+      - deny
+    default_room_options:
+      allow_subscription: false  # enable MucSub
+      mam: false
+  # mod_muc_admin: {}
+  mod_offline:
+    db_type: sql
+    access_max_user_messages: max_user_offline_messages
+    use_mam_for_storage: true # this would make offline messages queries not work
+  mod_offline_http_post_notify:
+    auth_token: "32d668d5e245735974c6fa4073560d6d"
+    post_url: "http://app/notify-message"
+    confidential: false
+  mod_user_status:
+    auth_token: "32d668d5e245735974c6fa4073560d6d"
+    post_url_unavailable: "http://app/notify-presence-unavailable"
+    post_url_available: "http://app/notify-presence-available"
+  mod_ping: {}
+  mod_privacy: {}
+  mod_private: {}
+  mod_proxy65:
+    access: local
+    max_connections: 5
+  mod_pubsub:
+    access_createnode: pubsub_createnode
+    plugins:
+      - flat
+      - pep
+    force_node_config:
+      ## Avoid buggy clients to make their bookmarks public
+      storage:bookmarks:
+        access_model: whitelist
+  # mod_register:
+  #   ## Only accept registration requests from the "trusted"
+  #   ## network (see access_rules section above).
+  #   ## Think twice before enabling registration from any
+  #   ## address. See the Jabber SPAM Manifesto for details:
+  #   ## https://github.com/ge0rg/jabber-spam-fighting-manifesto
+  #   ip_access: trusted_network
+  mod_roster:
+    db_type: sql
+    versioning: false
+  # mod_sip: {}
+  # mod_s2s_dialback: {}
+  mod_shared_roster:
+    db_type: sql
+  mod_stream_mgmt:
+    resend_on_timeout: if_offline
+  mod_vcard: {}
+  mod_vcard_xupdate: {}
+  mod_version:
+    show_os: false
+
+  mod_unread:
+    db_type: sql
+
+auth_use_cache: false
+auth_cache_missed: false
+host_config:
+  localhost:
+    auth_method: http
+    auth_opts:
+      host: "http://app:80"
+      connection_pool_size: 10
+      connection_opts: []
+      basic_auth: ""
+      path_prefix: "/_jabber/"
+    sql_type: mysql
+    sql_server: "db"
+    sql_database: "ejabberd"
+    sql_username: "root"
+    sql_password: "root"
+    ## If you want to specify the port:
+    sql_port: 3306
+### Local Variables:
+### mode: yaml
+### End:
+### vim: set filetype=yaml tabstop=8
